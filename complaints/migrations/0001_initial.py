@@ -31,4 +31,17 @@ class Migration(migrations.Migration):
                 'abstract': False,
             },
         ),
+        migrations.CreateModel(
+            name='ComplaintImage',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('image', models.ImageField(upload_to='complaints/images/')),
+                ('complaint', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='images', to='complaints.complaint')),
+            ],
+            options={
+                'abstract': False,
+            },
+        ),
     ]
