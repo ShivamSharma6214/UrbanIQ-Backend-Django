@@ -15,6 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from complaints.models import Complaint, ComplaintImage, Department, AuthorityProfile
 from .serializers import ComplaintSerializer, UserSerializer, DepartmentSerializer
+from .services import notify_report_created, notify_report_in_review, notify_report_resolved
 
 User = get_user_model()
 
@@ -148,13 +149,13 @@ class ComplaintListCreateView(APIView):
                 print(f"Image compression failed: {e}")
                 ComplaintImage.objects.create(complaint=complaint, image=img)
         serializer = ComplaintSerializer(complaint, context={"request": request})
-        # Fire-and-forget notifications
+        email_notice = None
         try:
-            from .services import notify_report_created
-            notify_report_created(complaint)
+            _, info = notify_report_created(complaint)
+            email_notice = info if info and info != "Sent" else None
         except Exception as e:
             print(f"notify_report_created failed: {e}")
-        return Response({"success": True, "report": serializer.data}, status=201)
+        return Response({"success": True, "report": serializer.data, "email_notice": email_notice}, status=201)
 
     def _compress_image(self, uploaded):
         """Compress/resize image to max width keeping aspect ratio; return ContentFile."""
@@ -257,13 +258,37 @@ class ComplaintDetailView(APIView):
         obj = self.get_object(pk, request.user)
         if not obj:
             return Response({'error': 'Not found'}, status=404)
+        previous_status = obj.status
         status_val = request.data.get('status')
         allowed = {c[0] for c in Complaint.Status.choices}
         if status_val and status_val in allowed:
             obj.status = status_val
-            obj.save(update_fields=['status'])
+        person_in_charge = request.data.get('person_in_charge')
+        signature = request.data.get('signature')
+        updates = ['status']
+        if person_in_charge:
+            obj.person_in_charge = person_in_charge
+            updates.append('person_in_charge')
+        if signature:
+            obj.resolution_signature = signature
+            updates.append('resolution_signature')
+        obj.save(update_fields=list(set(updates)))
+
+        email_notice = None
+        try:
+            if previous_status == Complaint.Status.OPEN and obj.status == Complaint.Status.IN_PROGRESS:
+                sent, info = notify_report_in_review(obj, obj.person_in_charge or '')
+                email_notice = info if info and info != "Sent" else None
+            if previous_status == Complaint.Status.IN_PROGRESS and obj.status == Complaint.Status.RESOLVED:
+                sent, info = notify_report_resolved(obj, obj.person_in_charge or '')
+                email_notice = info if info and info != "Sent" else email_notice
+        except Exception as e:
+            print(f"notify_status_change failed: {e}")
         serializer = ComplaintSerializer(obj, context={'request': request})
-        return Response(serializer.data)
+        data = serializer.data
+        if email_notice:
+            data['email_notice'] = email_notice
+        return Response(data)
 
     def delete(self, request, pk):
         obj = self.get_object(pk, request.user)

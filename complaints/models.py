@@ -30,6 +30,8 @@ class Complaint(TimestampModel):
     video = models.FileField(upload_to="complaints/videos/", blank=True, null=True)
     # New tracking id for external tracking
     tracking_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    person_in_charge = models.CharField(max_length=255, blank=True, null=True)
+    resolution_signature = models.TextField(blank=True, null=True)
     class Status(models.TextChoices):
         OPEN = 'open', 'Open'
         IN_PROGRESS = 'in_progress', 'In Progress'
@@ -71,3 +73,11 @@ Complaint.add_to_class(
     'assigned_department',
     models.ForeignKey(Department, on_delete=models.PROTECT, related_name='complaints', null=True, db_index=True)
 )
+
+
+class ResolutionProofImage(TimestampModel):
+    complaint = models.ForeignKey(Complaint, related_name="resolution_proofs", on_delete=models.CASCADE)
+    image = models.ImageField(upload_to="complaints/proof/")
+
+    def __str__(self):
+        return f"Proof for complaint {self.complaint_id}"

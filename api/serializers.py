@@ -7,9 +7,33 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    department = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ["id", "username", "email"]
+        fields = ["id", "username", "email", "role", "department"]
+    
+    def get_role(self, obj):
+        if obj.is_superuser:
+            return "admin"
+        try:
+            if hasattr(obj, 'authority_profile'):
+                return "authority"
+        except:
+            pass
+        return "citizen"
+    
+    def get_department(self, obj):
+        try:
+            if hasattr(obj, 'authority_profile'):
+                return {
+                    "id": obj.authority_profile.department.id,
+                    "name": obj.authority_profile.department.name
+                }
+        except:
+            pass
+        return None
 
 
 class ComplaintImageSerializer(serializers.ModelSerializer):
